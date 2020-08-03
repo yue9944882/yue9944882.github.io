@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="Hugo 0.74.3" />
+
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="author" content="" />
+  <meta property="og:url" content="https://yue9944882.github.io/posts/how-to-monitor-kubernetes-operator-by-distributed-tracing/" />
+  <link rel="canonical" href="https://yue9944882.github.io/posts/how-to-monitor-kubernetes-operator-by-distributed-tracing/" /><link rel="alternate" type="application/atom+xml" href="https://yue9944882.github.io/index.xml" title="Thanks for Donating @yue9944882">
+
+  <script type="application/ld+json">
+  {
+      "@context" : "http://schema.org",
+      "@type" : "BlogPosting",
+      "mainEntityOfPage": {
+           "@type": "WebPage",
+           "@id": "https:\/\/yue9944882.github.io\/"
+      },
+      "articleSection" : "posts",
+      "name" : "How to Monitor Kubernetes Operators By Distributed-Tracing?",
+      "headline" : "How to Monitor Kubernetes Operators By Distributed-Tracing?",
+      "description" : "author: \u0026quot;@yue9944882\u0026quot; (Github) Is it feasible to trace those operators running in kubernetes cluster? Currently there\u0026rsquo;re two major approaches to monitor your operator instances \u0026ndash; metrics and logging. Metrics does well in measuring your operator in concrete numbers at runtime, and by logging you can record running details into disk files in any format. However neither of them are helpful in showing the correlation between instances\/services. Distributed tracing is well-suited for microservice architectures, especially in which the services are serving in a synchronous protocol e.",
+      "inLanguage" : "en-US",
+      "author" : "",
+      "creator" : "",
+      "publisher": "",
+      "accountablePerson" : "",
+      "copyrightHolder" : "",
+      "copyrightYear" : "2020",
+      "datePublished": "2020-08-02 01:18:56 \u002b0800 CST",
+      "dateModified" : "2020-08-02 01:18:56 \u002b0800 CST",
+      "url" : "https:\/\/yue9944882.github.io\/posts\/how-to-monitor-kubernetes-operator-by-distributed-tracing\/",
+      "keywords" : [  ]
+  }
+</script>
+<title>How to Monitor Kubernetes Operators By Distributed-Tracing? - Thanks for Donating @yue9944882</title>
+  <meta property="og:title" content="How to Monitor Kubernetes Operators By Distributed-Tracing? - Thanks for Donating @yue9944882" />
+  <meta property="og:type" content="article" />
+  <meta property="og:description" content="author: &quot;@yue9944882&quot; (Github) Is it feasible to trace those operators running in kubernetes cluster? Currently there&rsquo;re two major approaches to monitor your operator instances &ndash; metrics and logging. Metrics does well in measuring your operator in concrete numbers at runtime, and by logging you can record running details into disk files in any format. However neither of them are helpful in showing the correlation between instances/services. Distributed tracing is well-suited for microservice architectures, especially in which the services are serving in a synchronous protocol e." />
+  <meta name="description" content="author: &quot;@yue9944882&quot; (Github) Is it feasible to trace those operators running in kubernetes cluster? Currently there&rsquo;re two major approaches to monitor your operator instances &ndash; metrics and logging. Metrics does well in measuring your operator in concrete numbers at runtime, and by logging you can record running details into disk files in any format. However neither of them are helpful in showing the correlation between instances/services. Distributed tracing is well-suited for microservice architectures, especially in which the services are serving in a synchronous protocol e." />
+  <meta property="og:locale" content="en-us" />
+
+  <link rel="stylesheet" href="/css/flexboxgrid-6.3.1.min.css" />
+  <link rel="stylesheet" href="/css/github-markdown.css" />
+  <link rel="stylesheet" href="/css/highlight/tomorrow.min.css" />
+  <link rel="stylesheet" href="/css/index.css">
+
+  
+
+  <link href="/index.xml" rel="alternate" type="application/rss+xml"
+    title="Thanks for Donating @yue9944882">
+  
+  <link href="https://fonts.googleapis.com/css?family=Arvo|Permanent+Marker|Bree+Serif" rel="stylesheet">
+  
+  
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=UA-xxx"></script>
+</head>
+
+<body>
+  <article class="post " id="article">
+    <div class="row">
+      <div class="col-xs-12">
+        <div class="site-header">
+          
+<header>
+  <div class="signatures site-title">
+    <a href="/">Thanks for donating!</a>
+  </div>
+</header>
+<div class="row end-xs">
+  
+  
+</div>
+<div class="header-line"></div>
+
+        </div>
+        <header class="post-header">
+          <h1 class="post-title">How to Monitor Kubernetes Operators By Distributed-Tracing?</h1>
+          
+          <div class="row post-desc">
+            <div class="col-xs-6">
+              
+              <time class="post-date" datetime="2020-08-02 01:18:56 CST">
+                02 Aug 2020
+              </time>
+              
+            </div>
+            <div class="col-xs-6">
+              
+            </div>
+          </div>
+          
+        </header>
+
+        <div class="post-content markdown-body">
+          
+          <pre><code>author: &quot;@yue9944882&quot; (Github)
+</code></pre><p>Is it feasible to trace those operators running in kubernetes cluster? Currently
+there&rsquo;re two major approaches to monitor your operator instances &ndash; metrics and
+logging. Metrics does well in measuring your operator in concrete numbers at runtime,
+and by logging you can record running details into disk files in any format. However
+neither of them are helpful in showing the correlation between instances/services.
+Distributed tracing is well-suited for microservice architectures, especially in
+which the services are serving in a synchronous protocol e.g. HTTP, gRPC. Sadly
+that doesn&rsquo;t apply to kubernetes operator pattern. An operator is working
+completely asynchronously, stimulated by the watching event feed from kubernetes
+apiserver. In this blog, we will get a deep insight into the feasibility of
+plumbing distributed tracing on the operator pattern.</p>
+<h1 id="the-headaches">The &ldquo;Headaches&rdquo;</h1>
+<p>Life isn&rsquo;t always happy on the path of bringing operator patterns into practice. A
+buggy operator can get stuck into any unexpected behaviors and leaving the developers
+in the ocean of confusion:</p>
+<ul>
+<li>
+<p><strong>Inresponsive operator</strong>: What if the operator instance doesn&rsquo;t reactively reconcile
+the resource you&rsquo;re trying to modify? There&rsquo;re a number of reasons that can potentionally
+cause the issue: (1) the resource is back-off&rsquo;d by the operator&rsquo;s work-queue due to
+previous errors. (2) the watch event can be missed becuase kubernetes&rsquo; watch doesn&rsquo;t
+guarantee every watch-event to be arriving at the operator. (3) The workers/consumers
+routines can be too busy to handle the event.</p>
+</li>
+<li>
+<p><strong>Locate performce bottleneck</strong>: A slow operator can drag down the promptness of the
+whole platform. However the performance bottleneck can be caused by various reasons
+and the diagnosing can also get more complicated in a case where more than one operators
+working in a chain/flow. Note that the performance issue is most likely happening in a
+larger cluster.</p>
+</li>
+</ul>
+<h1 id="background">Background</h1>
+<p>As a matter of fact, distributed tracing can also be working for asychronous services
+if the propagating formats are properly standardized, e.g. instrumenting AMQP isn&rsquo;t
+a tough work because it provides the extensibility to embed the span-context easily
+into the asynchronous request payloads. So it looks that instrumenting the kubernetes
+operators with tracing is equally feasible, isn&rsquo;t it? But here&rsquo;s a few things to notice
+that before you actually get start with implementing the integration:</p>
+<ol>
+<li><strong>Events processing/consuming is not linear</strong>:</li>
+</ol>
+<p>Operators doesn&rsquo;t directly consume the watch events from kubernetes cluster, the
+underlying framework (informer, controller-runtime, etc.) does additional processing
+before we map the event into actual reconciling tasks: (1) multiple watch events can
+be squashed/dedup&rsquo;d into single task, or even single event can branch out into multiple
+tasks. (2) a same task can also be executed multiple times because of the retrying
+strategy.</p>
+<p>Non-linear event processing makes the trace topology hard to visualize. In order to
+address this problem, OpenTelemetry introduced a new concept of <a href="https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/overview.md#links-between-spans">span-links</a>
+to fit operator workflows but sadly it&rsquo;s not yet implemented by any vendors.</p>
+<ol start="2">
+<li><strong>Cyclic events generation</strong>:</li>
+</ol>
+<p>Mostly, an operator is expected to refresh/update the target resource&rsquo;s status
+sub-resource after the reconciliation finishes &mdash; that will respawn another watch
+event and triggers a new task cyclically. Practically the operator should properly
+discriminates these cyclic events and short-circuit accordingly, by either dropping
+the events immediately upon their arrival or on the very beginning of reconciliation.</p>
+<p>The cyclic event problem uncovered another outstanding issue in terms of tracing
+operators: <strong><em>what&rsquo;s the end of a trace for operators?</em></strong> Currently I presume the
+answer to be <strong><em>when a resource reaches its logical desired state</em></strong>, but the test of
+this condition can be way different for different operators&rsquo; cases. It&rsquo;s hard to
+measure blindly regardless of how the operator actually implemented.</p>
+<p>To see more previous discussion/thread around the topic, click <a href="https://github.com/kubernetes/enhancements/pull/650">here</a>.</p>
+<h1 id="modelling">Modelling</h1>
+<h3 id="modelling-one-time-reconciliation">Modelling one-time reconciliation</h3>
+<p>A complete timeline for an operator to reconcile a single resource will be:</p>
+<ul>
+<li>T1. Received watch event from the resource.</li>
+<li>T2. Maps the event to one task request otherwise drop it.</li>
+<li>T3. Pushes the task request into the work-queue.</li>
+<li>T4. The task request popped from the queue.</li>
+<li>T5. The task starts.</li>
+<li>T6. The task ends.</li>
+</ul>
+<p>Then we can model the above series into the following spans:</p>
+<ul>
+<li>T1-T2: Handling raw watch event</li>
+<li>T3-T4: Queuing time cost</li>
+<li>T5-T6: Reconciling time cost</li>
+</ul>
+<p>(Note that the gaps of T2-T3, T4-T5 are almost neglectable.)</p>
+<h3 id="modelling-operator-relations">Modelling operator relations</h3>
+<p>One operator can watch multiple resources at the same time but mostly there&rsquo;s supposed
+to be only one primary resource and we mapped the other secondary resources to its
+related primary. Hence there&rsquo;s only one logical target resource to process for an
+operator. For simplication, we&rsquo;re naming the target resource as &ldquo;watching resource&rdquo;
+in the following contents.</p>
+<p>Before we getting hands on working out a solution, let&rsquo;s
+have a retrospect sorting operators into different classes:</p>
+<ul>
+<li>
+<p><strong>Type A - Read-only</strong>: The operator keeps receiving watch events but does
+nothing (for the most period of time). It sounds hilarious but a doing-nothing
+operator has to be the end-consumer of the event flow regardless of the event source
+or the information it carries. For read-only operators, we can simply model every
+reconcilation into a &ldquo;leaf&rdquo; span.</p>
+</li>
+<li>
+<p><strong>Type B - Writes third-party system</strong>: Simlar to A, as long as the write target
+is not a kubernetes object, the operator doesn&rsquo;t have to handle cyclic events so every
+reconciliation can also be model&rsquo;d as a &ldquo;leaf&rdquo; span in a trace.</p>
+</li>
+<li>
+<p><strong>Type C - Writes only to its watching resource</strong>: The write can either be upon the
+resource or its status sub-resource. For the former case, imagine an operator merely
+attache/dettaches finializers to the new resources, while for the latter, consider the
+<a href="https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/certificates/certificate_controller.go">CSR controller</a> as an example. Because of the fact that there can be potentionally
+another operator watching the same resource, we&rsquo;re not sure if it&rsquo;s a &ldquo;leaf&rdquo; in the
+picture. But what we&rsquo;re sure is that this operator will be observing the event which
+is triggered by its last write &mdash; the operator can&rsquo;t escape from that. We can model
+this strong connection into a &ldquo;parent/child&rdquo; relation between spans. As for the case
+where the updates are watched by other system, I will defer the analysis to &ldquo;Type E&rdquo;.</p>
+</li>
+<li>
+<p><strong>Type D - Fans out writes only to non-watching resources</strong>: <a href="https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/serviceaccount/tokens_controller.go">ServiceAccountToken controller</a> is an excellent example for this type. It can be either leaf or
+non-leaf, depending on whether its fanning-out writes is watched by other systems in
+the picture. We can model this weak connection into &ldquo;link&rdquo; relation between spans.</p>
+</li>
+<li>
+<p><strong>Typd E - Writes to any resources (combination of C+D)</strong>: This is the most complicated
+and unfortunately the most common case. Let&rsquo;s take a look at how <a href="https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/deployment/deployment_controller.go">Deployment controller</a> works in a cluster. It primarily watches deployments, then
+writes to replicasets under certain conditions, these writes upon replicasets will
+go on triggering further works by <a href="https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/replicaset/replica_set.go">ReplicaSet controller</a>.
+For this type, by combining C and D, we can discriminate the writes by their target resource
+into (1)watching and (2)non-watching, then branch out the spans accordingly: (1) to
+&ldquo;parent/child&rdquo; span relation and (2) to &ldquo;link&rdquo; relation.</p>
+</li>
+</ul>
+<h1 id="invert-the-picture">Invert the &ldquo;Picture&rdquo;</h1>
+<h3 id="from-bus-to-dag">From &ldquo;BUS&rdquo; to &ldquo;DAG&rdquo;</h3>
+<p>Typically in a kubernetes cluster, all the operators are working in a flattened layer &mdash;
+kubernetes cluster is a centralized event center and the operators subscribes event
+from it. The collaborating operators have to exchange data by sending events via kubernetes
+and the resource types are the protocol.</p>
+<p>In conclusion, every operator is loosely-coupled unlike the microservices, so the crux of
+tracing operator is to <strong>formalize the relation between operators in a unified/standardized
+term</strong>. This may need a new protocol over kubernetes similar to AMQP, it can also be a
+CustomResource as protocol.</p>
+
+        </div>
+
+        <div class="row middle-xs">
+          <div class="col-xs-12">
+            
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-xs-12">
+            
+          </div>
+        </div>
+
+        
+        
+
+        
+        
+        <div style="height: 50px;"></div>
+        
+        <div class="post-comments">
+          <div id="disqus_thread"></div>
+<script>
+  window.addEventListener("load", () => {
+    (function() {
+      
+      var d = document,
+        s = d.createElement("script");
+      s.src = "https://yue9944882.disqus.com/embed.js";
+      s.setAttribute("data-timestamp", +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  });
+</script>
+<noscript
+  >Please enable JavaScript to view the
+  <a href="https://disqus.com/?ref_noscript"
+    >comments powered by Disqus.</a
+  ></noscript
+>
+
+        </div>
+        
+        
+
+        <div class="site-footer">
+  
+  <div class="site-footer-item">
+    <a href="https://yue9944882.github.io/about.html" target="_blank">About</a>
+  </div>
+  
+  <div class="site-footer-item">
+    <a href="https://github.com/yue9944882" target="_blank">Github</a>
+  </div>
+  
+  <div class="site-footer-item">
+    <a href="https://paypal.me/yue9944882" target="_blank">Donate-PayPal</a>
+  </div>
+  
+  <div class="site-footer-item">
+    <a href="https://github.com/yue9944882/hugo/blob/master/wechat.JPG?raw=true" target="_blank">Donate-Wechat</a>
+  </div>
+  
+  <div class="site-footer-item">
+    <a href="https://github.com/yue9944882/hugo/blob/master/alipay.JPG?raw=true" target="_blank">Donate-Alipay</a>
+  </div>
+  
+  
+</div>
+
+      </div>
+    </div>
+  </article>
+
+  <script src="/js/highlight.pack.js"></script>
+
+
+<script>
+  hljs.initHighlightingOnLoad();
+  
+  
+  
+    
+    
+  
+</script>
+
+  
+
+</body>
+
+</html>
